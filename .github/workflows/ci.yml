@@ -35,5 +35,5 @@ jobs:
         with:
           persist-credentials: false
       - run: bash build.sh
-      - run: lipo -verify_arch arm64 x86_64 "dist/Codex Pulse.app/Contents/MacOS/CodexPulse"
+      - run: lipo "dist/Codex Pulse.app/Contents/MacOS/CodexPulse" -verify_arch arm64 x86_64
       - run: codesign --verify --deep --strict "dist/Codex Pulse.app"
