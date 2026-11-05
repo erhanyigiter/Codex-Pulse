@@ -746,7 +746,7 @@ struct Panel: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(item: $editingAccount) { ProfileSettingsView(model: model, account: $0) }
         .onPreferenceChange(PanelHeightsKey.self) { values in
-            let rounded = values.mapValues { ceil($0 * 2) / 2 }
+            let rounded: [String: CGFloat] = values.mapValues { ($0 * 2).rounded(.up) / 2 }
             if heights != rounded { heights = rounded }
         }
         .onAppear { model.onResize?(panelHeight) }
