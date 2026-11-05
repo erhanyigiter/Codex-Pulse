@@ -27,7 +27,7 @@ source = root / 'dist' / f'Codex-Pulse-{version}-source.zip'
 files = ['App.swift', 'Icon.swift', 'backend.py', 'Info.plist', 'build.sh', 'package.sh',
          'KULLANIM.md', 'USAGE.md', 'Localizations.json', 'README.md', 'LICENSE', 'CONTRIBUTING.md', '.gitignore',
          '.gitattributes', '.github/workflows/ci.yml', 'tests/test_backend.py',
-         'docs/images/accounts.png', 'docs/images/collapsed.png', 'docs/images/settings.png', 'docs/images/history.png']
+         'docs/images/accounts.png', 'docs/images/collapsed.png', 'docs/images/dropdowns.gif', 'docs/images/settings.png', 'docs/images/history.png']
 with zipfile.ZipFile(source, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
     for name in files:
         archive.write(root / name, 'CodexPulse/' + name)

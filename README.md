@@ -9,7 +9,9 @@ that usage is available again.
  · [Türkçe kullanım rehberi](KULLANIM.md)
  · [Contributing](CONTRIBUTING.md)
 
-<img src="docs/images/collapsed.png" alt="English Codex Pulse interface with independently collapsible accounts and compact inline countdowns" width="420">
+<img src="docs/images/dropdowns.gif" alt="English demo: expand Work, expand Personal independently, then collapse both account dropdowns" width="420">
+
+<sub>Expand and collapse accounts independently. The animation uses sample accounts.</sub>
 
 ## Features
 
@@ -153,7 +155,7 @@ and does not depend on the source directory after installation.
 
 </details>
 
-All screenshots show the English interface and use sample accounts. No real account information or user screenshots are included.
+All previews show the English interface and use sample accounts. No real account information or user screenshots are included.
 
 ## License
 
