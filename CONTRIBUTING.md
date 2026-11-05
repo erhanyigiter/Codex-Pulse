@@ -7,6 +7,8 @@ and how you verified it.
 
 - `App.swift`: AppKit menu bar shell, SwiftUI panels, and notifications.
 - `backend.py`: account discovery, Codex app-server client, scheduling, and local state.
+- `Localizations.json`: shared English translations for native UI and backend messages. Turkish source strings remain canonical so old history can change language without being rewritten.
+- `USAGE.md` / `KULLANIM.md`: bundled English and Turkish user guides.
 - `tests/test_backend.py`: synthetic scheduling and process lifecycle tests.
 - `build.sh`: Universal 2 build and local ad-hoc signing.
 - `package.sh`: DMG, source archive, and checksums.

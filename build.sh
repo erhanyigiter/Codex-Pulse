@@ -16,6 +16,8 @@ swiftc "$project_dir/Icon.swift" -o "$project_dir/dist/make-icon" \
 "$project_dir/dist/make-icon" "$project_dir/dist/AppIcon.iconset"
 iconutil -c icns "$project_dir/dist/AppIcon.iconset" -o "$bundle/Contents/Resources/AppIcon.icns"
 cp -X "$project_dir/Info.plist" "$bundle/Contents/Info.plist"
+cp -X "$project_dir/Localizations.json" "$bundle/Contents/Resources/Localizations.json"
+cp -X "$project_dir/USAGE.md" "$bundle/Contents/Resources/USAGE.md"
 cp -X "$project_dir/backend.py" "$bundle/Contents/Resources/backend.py"
 cp -X "$project_dir/KULLANIM.md" "$bundle/Contents/Resources/KULLANIM.md"
 # Desktop may be synced by File Provider, which can add Finder metadata mid-build.

@@ -5,18 +5,24 @@ follow their reset times, and optionally send one short prompt after Codex confi
 that usage is available again.
 
 [Download the latest release](https://github.com/erhanyigiter/Codex-Pulse/releases/latest)
+ · [User guide](USAGE.md)
  · [Türkçe kullanım rehberi](KULLANIM.md)
  · [Contributing](CONTRIBUTING.md)
 
-<img src="docs/images/accounts.png" alt="Codex Pulse accounts panel with sample accounts and countdowns" width="420">
+<img src="docs/images/collapsed.png" alt="English Codex Pulse interface with independently collapsible accounts and compact inline countdowns" width="420">
 
 ## Features
 
-- A countdown for every discovered Monocode Codex profile.
+- A compact live countdown in every collapsed account row, without increasing the panel size.
+- Independent dropdowns: expand several accounts at once; all start collapsed.
+- A responsive one-to-three-account panel, with scrolling for additional accounts.
+- Clear **5-hour limit** and **Weekly limit** usage bars.
+- **English by default**, with Turkish available in Settings → Language.
+- Press Enter to save a nickname and close its dialog after confirmation.
 - **Reset-only mode:** wait for the server-reported reset instead of polling on a fixed schedule.
 - Optional periodic status checks with your own interval in minutes.
 - A separate, configurable retry interval for status errors or delayed resets.
-- Global start/stop and individual account switches.
+- Global start/stop and individual account switches. Disabled profiles are skipped on startup, manual refresh, retries, wake, and CLI status checks.
 - Account nicknames, per-account scheduling overrides, and a selectable menu bar countdown.
 - Quiet hours, optional macOS notifications, and configurable startup behavior.
 - A local history of the last 300 events, with filtering and JSON export.
@@ -30,12 +36,12 @@ starts a new usage window. Automation is off by default.
 
 ## Install
 
-1. Download `Codex-Pulse-1.1.0-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
+1. Download `Codex-Pulse-1.2.0-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
 2. Copy **Codex Pulse.app** to Applications, or to your personal `~/Applications` folder.
 3. Open the copied app and click the waveform icon in the menu bar.
 4. Review **Settings**, save your choices, then click **Start / Başlat**.
 
-The interface is currently in Turkish. Quit an older copy before replacing it.
+English is the default. To switch languages, open **Settings → Language**, choose **English** or **Türkçe**, then **Save settings**. Menus, status messages, notifications, history and dates update without restarting. Your nicknames are preserved. Quit an older copy before replacing it.
 
 ### Requirements
 
@@ -79,6 +85,8 @@ sending a backlog of prompts.
 The Codex app-server interface is experimental and may change. This version
 requires the identity and permission fields used by its backend; older CLI
 versions may display status but refuse automation.
+
+The **5-hour limit** and **Weekly limit** labels are provided by Codex Pulse; Monocode does not supply those UI strings. Usage percentages and reset timestamps come from Codex.
 
 ## Local data
 
@@ -136,14 +144,16 @@ Build outputs go into ignored `dist/`. The app bundle contains its own backend
 and does not depend on the source directory after installation.
 
 <details>
-<summary>Settings and history previews</summary>
+<summary>Expanded accounts, language settings, and activity history</summary>
+
+<img src="docs/images/accounts.png" alt="Two independently expanded accounts with 5-hour limit and Weekly limit bars, in English" width="420">
 
 <img src="docs/images/settings.png" alt="Reset-only scheduling, custom status retry minutes, quiet hours, and startup settings" width="420">
 <img src="docs/images/history.png" alt="Local event history and export controls" width="420">
 
 </details>
 
-All screenshots use sample data.
+All screenshots show the English interface and use sample accounts. No real account information or user screenshots are included.
 
 ## License
 

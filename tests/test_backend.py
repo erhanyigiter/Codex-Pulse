@@ -401,6 +401,206 @@ class AdvancedFeatureTests(unittest.TestCase):
             self.assertFalse(watcher.refresh)
             self.assertEqual(events[-1]['settings']['selectedAccountId'], 'account-test')
 
+    def test_profile_save_acknowledges_only_after_successful_persistence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.command({'action': 'profile', 'id': 'account-test', 'requestId': 'save-one',
+                             'settings': {'alias': 'İş hesabı'}})
+            self.assertEqual(events[-1]['commandResult'], {'id': 'save-one', 'ok': True, 'message': None})
+            saved = json.loads(watcher.path.read_text())
+            self.assertEqual(saved['profiles']['account-test']['alias'], 'İş hesabı')
+
+    def test_invalid_profile_save_reports_failure_for_matching_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.command({'action': 'profile', 'id': 'account-test', 'requestId': 'save-bad',
+                             'settings': {'alias': 'not allowed\n'}})
+            result = events[-1]['commandResult']
+            self.assertEqual(result['id'], 'save-bad')
+            self.assertFalse(result['ok'])
+            self.assertIsNotNone(result['message'])
+            self.assertNotIn('alias', watcher.preference('account-test'))
+
+    def test_profile_save_disk_failure_does_not_acknowledge_success(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            with patch.object(watcher, 'save', side_effect=OSError('disk full')):
+                watcher.command({'action': 'profile', 'id': 'account-test', 'requestId': 'save-disk',
+                                 'settings': {'alias': 'İş hesabı'}})
+            self.assertFalse(events[-1]['commandResult']['ok'])
+            self.assertEqual(events[-1]['commandResult']['id'], 'save-disk')
+            self.assertFalse(watcher.running)
+
+
+    def test_disabled_account_is_not_read_even_when_check_called_directly(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder, {'profiles': {'account-test': {'enabled': False}}})
+            with patch.object(pulse, 'read_account') as read:
+                watcher.check('account-test', watcher.epoch)
+                read.assert_not_called()
+            self.assertEqual(watcher.state['history'], [])
+
+    def test_disabled_account_is_skipped_on_startup_refresh_start_and_wake(self):
+        for action in (None, 'refresh', 'start', 'wake'):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
+                watcher, _ = self.make_watcher(folder, {'profiles': {'account-test': {'enabled': False}}})
+                if action == 'wake':
+                    watcher.running = True
+                if action:
+                    watcher.command({'action': action})
+                before = list(watcher.state['history'])
+                def stop_loop(**kwargs):
+                    watcher.closed = True
+                with patch.object(pulse, 'read_account') as read, patch.object(watcher.wake, 'wait', side_effect=stop_loop):
+                    watcher.run()
+                    read.assert_not_called()
+                self.assertEqual(watcher.state['history'], before)
+
+    def test_switch_off_cancels_active_check_and_does_not_log_connection_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder)
+            def disable_and_fail(*args, **kwargs):
+                watcher.command({'action': 'toggle', 'id': 'account-test'})
+                raise RuntimeError('connection closed after cancellation')
+            with patch.object(pulse, 'read_account', side_effect=disable_and_fail):
+                watcher.check('account-test', watcher.epoch)
+            self.assertFalse(watcher.preference('account-test')['enabled'])
+            self.assertTrue(watcher.children.stopping)
+            self.assertIsNone(watcher.accounts['account-test']['error'])
+            self.assertEqual(watcher.accounts['account-test']['status'], 'İzleme kapalı')
+            self.assertFalse(any(e['kind'] in ('check', 'error') for e in watcher.state['history']))
+
+    def test_late_success_from_disabled_account_is_ignored(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder)
+            def disable_and_return(*args, **kwargs):
+                watcher.command({'action': 'toggle', 'id': 'account-test'})
+                return {'email': 'fixture@example.com', 'planType': 'plus'}, {'accountId': 'fixture'}, snapshot()
+            with patch.object(pulse, 'read_account', side_effect=disable_and_return):
+                watcher.check('account-test', watcher.epoch)
+            self.assertIsNone(watcher.accounts['account-test']['lastCheckedAt'])
+            self.assertFalse(any(e['kind'] == 'check' for e in watcher.state['history']))
+
+    def test_cli_check_respects_disabled_profile_preferences(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder, {'profiles': {'account-test': False}})
+            args = ['backend.py', '--check', '--root', str(watcher.root), '--state-dir', str(watcher.state_dir)]
+            with patch('sys.argv', args), patch.object(pulse, 'codex_executable', return_value='/fake'), \
+                 patch.object(pulse, 'read_account') as read, patch('sys.stdout', new_callable=io.StringIO):
+                pulse.main()
+                read.assert_not_called()
+
+    def test_reenabled_account_can_be_checked_again(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder, {'profiles': {'account-test': {'enabled': False}}})
+            watcher.command({'action': 'toggle', 'id': 'account-test'})
+            result = ({'email': 'fixture@example.com', 'planType': 'plus'}, {'accountId': 'fixture'}, snapshot())
+            with patch.object(pulse, 'read_account', return_value=result) as read:
+                watcher.check('account-test', watcher.epoch)
+                read.assert_called_once()
+            self.assertIsNotNone(watcher.accounts['account-test']['lastCheckedAt'])
+
+    def test_rpc_does_not_send_rate_limit_request_after_switch_is_disabled(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, _ = self.make_watcher(folder)
+            root = Path(folder)
+            fake = root / 'codex'
+            fake.write_text('''#!/usr/bin/python3
+import json, os, sys
+from pathlib import Path
+for line in sys.stdin:
+    req = json.loads(line)
+    method = req['method']
+    with (Path(os.environ['CODEX_HOME'])/'methods.txt').open('a') as log:
+        log.write(method + '\\n')
+    if method == 'initialized': continue
+    result = {} if method == 'initialize' else {'account': {'type':'chatgpt', 'email':'fixture@example.com', 'planType':'plus'}}
+    print(json.dumps({'id':req['id'], 'result':result}), flush=True)
+''')
+            fake.chmod(0o700)
+            watcher.codex = str(fake)
+            original_read = pulse.read_account
+            def read_and_disable(codex, home, children, on_account, guard):
+                def got_account(account):
+                    on_account(account)
+                    watcher.command({'action': 'toggle', 'id': 'account-test'})
+                return original_read(codex, home, children, got_account, guard)
+            reaped = []
+            original_finish = watcher.children.finish
+            def finish_and_verify(process):
+                try:
+                    original_finish(process)
+                finally:
+                    reaped.append(process.returncode)
+            with patch.object(pulse, 'read_account', side_effect=read_and_disable), \
+                 patch.object(watcher.children, 'finish', side_effect=finish_and_verify):
+                watcher.check('account-test', watcher.epoch)
+            self.assertEqual(len(reaped), 1)
+            self.assertIsNotNone(reaped[0])
+            methods = (watcher.root/'account-test/methods.txt').read_text().splitlines()
+            self.assertIn('account/read', methods)
+            self.assertNotIn('account/rateLimits/read', methods)
+            self.assertFalse(watcher.children.active)
+            self.assertFalse(any(e['kind'] in ('error', 'check') for e in watcher.state['history']))
+
+
+    def test_language_defaults_to_english_for_new_and_existing_preferences(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder, {'settings': {'interval': 47}})
+            self.assertEqual(watcher.settings['language'], 'en')
+            watcher.publish()
+            self.assertEqual(events[-1]['accounts'][0]['label'], 'Codex account 1')
+            watcher.command({'action': 'settings', 'settings': {'language': 'tr'}})
+            reopened, _ = self.make_watcher(folder)
+            self.assertEqual(reopened.settings['language'], 'tr')
+            self.assertEqual(reopened.settings['interval'], 47)
+
+    def test_language_change_retranslates_history_without_rewriting_history_or_aliases(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.command({'action': 'profile', 'id': 'account-test', 'settings': {'alias': 'Başlat'}})
+            watcher.event('check', 'Limit durumu okundu · Limit dolu · yenilenme bekleniyor', 'account-test')
+            watcher.publish()
+            self.assertEqual(events[-1]['history'][0]['message'], 'Usage limits checked · Limit reached · waiting for reset')
+            self.assertEqual(events[-1]['accounts'][0]['alias'], 'Başlat')
+            original = watcher.state['history'][-1]['message']
+            watcher.command({'action': 'settings', 'settings': {'language': 'tr'}})
+            self.assertEqual(events[-1]['history'][1]['message'], original)
+            self.assertEqual(watcher.state['history'][-2]['message'], original)
+            self.assertEqual(events[-1]['accounts'][0]['alias'], 'Başlat')
+
+    def test_invalid_language_is_rejected_without_overwriting_preferences(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.command({'action': 'settings', 'requestId': 'bad-language', 'settings': {'language': 'de'}})
+            self.assertEqual(watcher.settings['language'], 'en')
+            self.assertFalse(events[-1]['commandResult']['ok'])
+            self.assertEqual(events[-1]['commandError'], 'Invalid language selection.')
+
+    def test_notification_body_follows_language_but_nickname_is_never_translated(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.command({'action': 'settings', 'settings': {'notificationsEnabled': True}})
+            watcher.command({'action': 'profile', 'id': 'account-test', 'settings': {'alias': 'Başlat'}})
+            watcher.event('success', 'Kısa sorgu tamamlandı', 'account-test', notify=True)
+            self.assertEqual(events[-1]['notification']['body'], 'Short prompt completed')
+            self.assertEqual(events[-1]['notification']['title'], 'Başlat')
+            watcher.command({'action': 'settings', 'settings': {'language': 'tr'}})
+            watcher.event('success', 'Kısa sorgu tamamlandı', 'account-test', notify=True)
+            self.assertEqual(events[-1]['notification']['body'], 'Kısa sorgu tamamlandı')
+
+    def test_catalog_covers_static_native_interface_strings_and_format_placeholders(self):
+        import re
+        root = Path(__file__).parents[1]
+        source = (root/'App.swift').read_text()
+        keys = re.findall(r'(?:model\.)?(?:tr|fmt)\("([^"\\]*)"', source)
+        for key in keys:
+            self.assertIn(key, pulse.ENGLISH, key)
+        for original, translated in pulse.ENGLISH.items():
+            self.assertEqual(set(re.findall(r'\{(\w+)\}',original)), set(re.findall(r'\{(\w+)\}',translated)), original)
+        self.assertEqual(pulse.localize('5 saatlik limit'), '5-hour limit')
+        self.assertEqual(pulse.localize('Haftalık limit'), 'Weekly limit')
+
 
 if __name__ == '__main__':
     unittest.main()

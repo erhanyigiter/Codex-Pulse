@@ -6,6 +6,7 @@ Only explicit Start enables model requests; status reads do not create model tur
 """
 import argparse
 from datetime import datetime, timedelta
+from contextlib import contextmanager, nullcontext
 import fcntl
 import hashlib
 import json
@@ -27,7 +28,26 @@ DEFAULT_ROOT = Path.home() / 'Library/Application Support/com.monocode.desktop/p
 DEFAULT_STATE = Path.home() / 'Library/Application Support/Codex Pulse'
 GRACE = 15
 MAX_HISTORY = 300
+ENGLISH = json.loads(Path(__file__).with_name('Localizations.json').read_text())['en']
+
+
+def localize(text, language='en'):
+    if text is None or language == 'tr':
+        return text
+    if text in ENGLISH:
+        return ENGLISH[text]
+    if text.startswith('Codex hesabı '):
+        return 'Codex account ' + text.removeprefix('Codex hesabı ')
+    prefix = 'Limit durumu okundu · '
+    if text.startswith(prefix):
+        return ENGLISH['Limit durumu okundu'] + ' · ' + localize(text[len(prefix):], language)
+    if ' · ' in text:
+        return ' · '.join(localize(part, language) for part in text.split(' · '))
+    return text
+
+
 DEFAULT_SETTINGS = {
+    'language': 'en',
     'mode': 'reset', 'interval': 30, 'retryInterval': 5,
     'notificationsEnabled': False, 'autoStart': False, 'selectedAccountId': '',
     'quietEnabled': False, 'quietStart': '23:00', 'quietEnd': '08:00',
@@ -54,6 +74,8 @@ def clock_minutes(value):
 
 def validate_settings(settings):
     result = {**DEFAULT_SETTINGS, **settings}
+    if result['language'] not in ('en', 'tr'):
+        raise ValueError('Geçersiz dil seçimi.')
     if result['mode'] not in ('reset', 'periodic'):
         raise ValueError('Geçersiz kontrol modu.')
     for key in ('interval', 'retryInterval'):
@@ -195,6 +217,17 @@ class Cancelled(Exception):
     pass
 
 
+def signal_child(process, sig):
+    try:
+        os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # Some restricted macOS environments deny group signals after a race.
+        # Target the child PID instead; Popen checks/reaps an already-exited child.
+        process.send_signal(sig)
+
+
 class Children:
     def __init__(self):
         self.lock = threading.RLock()
@@ -214,14 +247,14 @@ class Children:
     def finish(self, process):
         try:
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGTERM)
+                signal_child(process, signal.SIGTERM)
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    signal_child(process, signal.SIGKILL)
                     process.wait(timeout=2)
         except ProcessLookupError:
-            pass
+            process.wait(timeout=2)
         finally:
             with self.lock:
                 self.active.discard(process)
@@ -234,7 +267,7 @@ class Children:
             self.stopping = True
             for process in list(self.active):
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    signal_child(process, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
 
@@ -243,9 +276,10 @@ class Children:
             self.stopping = False
 
 
-def read_account(codex, home, children, on_account=None):
+def read_account(codex, home, children, on_account=None, guard=nullcontext):
     with tempfile.TemporaryDirectory(prefix='codex-pulse-check-') as folder:
-        process = children.launch([codex, 'app-server', '--stdio'], home, folder)
+        with guard():
+            process = children.launch([codex, 'app-server', '--stdio'], home, folder)
         messages = queue.Queue()
 
         def reader():
@@ -264,8 +298,9 @@ def read_account(codex, home, children, on_account=None):
         thread.start()
 
         def request(number, method, params):
-            process.stdin.write(json.dumps({'id': number, 'method': method, 'params': params}) + '\n')
-            process.stdin.flush()
+            with guard():
+                process.stdin.write(json.dumps({'id': number, 'method': method, 'params': params}) + '\n')
+                process.stdin.flush()
             deadline = time.monotonic() + 45
             while time.monotonic() < deadline:
                 try:
@@ -282,9 +317,10 @@ def read_account(codex, home, children, on_account=None):
 
         try:
             request(1, 'initialize', {'clientInfo': {'name': 'codex_pulse', 'title': APP_NAME,
-                                                    'version': '1.1.0'}, 'capabilities': None})
-            process.stdin.write('{"method":"initialized"}\n')
-            process.stdin.flush()
+                                                    'version': '1.2.0'}, 'capabilities': None})
+            with guard():
+                process.stdin.write('{"method":"initialized"}\n')
+                process.stdin.flush()
             account = request(2, 'account/read', {'refreshToken': False}).get('account')
             if not account or account.get('type') != 'chatgpt':
                 raise RuntimeError('Bu profilde ChatGPT oturumu yok; Monocode’dan giriş yapın')
@@ -348,6 +384,7 @@ class Watcher:
         self.running = self.state['settings']['autoStart'] and not force_paused
         self.error = None if self.codex else 'Codex CLI bulunamadı. Önce Codex CLI kurulumunu tamamlayın.'
         self.command_error = None
+        self.command_result = None
         self.rescan()
 
     @property
@@ -387,7 +424,7 @@ class Watcher:
             pref = self.preference(key)
             if key not in self.accounts:
                 self.accounts[key] = {'id': key, 'label': 'Codex hesabı ' + str(index + 1),
-                                      'plan': '', 'status': 'Durum okunuyor', 'nextCheckAt': 0,
+                                      'plan': '', 'status': 'Durum okunuyor' if pref.get('enabled', True) else 'İzleme kapalı', 'nextCheckAt': 0,
                                       'enabled': pref.get('enabled', True), 'alias': pref.get('alias', ''),
                                       'usedPercent': None, 'weeklyUsedPercent': None,
                                       'resetsAt': None, 'lastCheckedAt': None,
@@ -407,11 +444,21 @@ class Watcher:
                 row['mode'] = pref.get('mode', self.settings['mode'])
                 row['interval'] = pref.get('interval', self.settings['interval'])
                 row['retryInterval'] = pref.get('retryInterval', self.settings['retryInterval'])
+                for field in ('label', 'status', 'error'):
+                    row[field] = localize(row.get(field), self.settings['language'])
                 rows.append(row)
+            history = [{**entry, 'message': localize(entry['message'], self.settings['language'])}
+                       for entry in reversed(self.state['history'])]
+            result = ({**self.command_result, 'message': localize(self.command_result.get('message'), self.settings['language'])}
+                      if self.command_result else None)
+            notice = ({**notification, 'body': localize(notification['body'], self.settings['language'])}
+                      if notification else None)
             self.emit({'running': self.running, 'settings': dict(self.settings), 'accounts': rows,
-                       'error': self.error, 'commandError': self.command_error,
-                       'activeId': self.active_id, 'history': list(reversed(self.state['history'])),
-                       'notification': notification,
+                       'error': localize(self.error, self.settings['language']),
+                       'commandError': localize(self.command_error, self.settings['language']),
+                       'commandResult': result,
+                       'activeId': self.active_id, 'history': history,
+                       'notification': notice,
                        'quietUntil': quiet_until(time.time(), self.settings)})
 
     def reschedule(self):
@@ -426,6 +473,9 @@ class Watcher:
 
     def command(self, command):
         with self.lock:
+            request_id = command.get('requestId')
+            self.command_result = None
+            succeeded = True
             try:
                 self.command_error = None
                 action = command.get('action')
@@ -497,6 +547,9 @@ class Watcher:
                         self.children.cancel_all()
                     if pref['enabled']:
                         account['nextCheckAt'] = time.time()
+                    else:
+                        account['error'] = None
+                        account['status'] = 'İzleme kapalı'
                     self.event('settings', 'Hesap izlemeye açıldı' if pref['enabled'] else 'Hesap izleme kapatıldı', key)
                 elif action == 'clearHistory':
                     self.state['history'] = []  # Never clear the at-most-once journal.
@@ -504,38 +557,52 @@ class Watcher:
                 else:
                     raise ValueError('Komut tanınmadı.')
             except (ValueError, TypeError) as error:
+                succeeded = False
                 self.command_error = str(error)
             except OSError:
+                succeeded = False
                 self.running = False
                 self.epoch += 1
                 self.children.cancel_all()
                 self.error = 'Yerel kayıt yazılamadı. İzleme durduruldu; disk alanını kontrol edin.'
+            if isinstance(request_id, str) and len(request_id) <= 100:
+                self.command_result = {'id': request_id, 'ok': succeeded,
+                                       'message': None if succeeded else self.command_error or self.error}
             self.wake.set()
             self.publish()
 
     def check(self, key, epoch, allow_trigger=True):
         account_view = self.accounts[key]
         with self.lock:
-            if self.closed or epoch != self.epoch:
+            if self.closed or epoch != self.epoch or not self.preference(key).get('enabled', True):
                 return
             self.children.resume()
             self.active_id = key
             self.publish()
         try:
             home = self.root / key
-            def account_found(account):
+            @contextmanager
+            def check_enabled():
                 with self.lock:
+                    if self.closed or epoch != self.epoch or not self.preference(key).get('enabled', True):
+                        raise Cancelled()
+                    yield
+
+            def account_found(account):
+                with check_enabled():
                     account_view['label'] = account.get('email') or account_view['label']
                     account_view['plan'] = account.get('planType') or ''
                     self.publish()
 
-            account, response, snapshot = read_account(self.codex, home, self.children, account_found)
+            account, response, snapshot = read_account(self.codex, home, self.children, account_found, guard=check_enabled)
             now = time.time()
             owner = identity(account, response)
             window = short_window(snapshot)
             weekly = next((w for w in (snapshot.get('primary'), snapshot.get('secondary'))
                            if w and (w.get('windowDurationMins') or 0) >= 10080), None)
             with self.lock:
+                if self.closed or epoch != self.epoch or not self.preference(key).get('enabled', True):
+                    return
                 account_view.update(label=account.get('email') or account_view['label'],
                                     plan=account.get('planType') or '', lastCheckedAt=now,
                                     usedPercent=window.get('usedPercent') if window else None,
@@ -598,11 +665,16 @@ class Watcher:
                 account_view['nextCheckAt'] = next_check(now, self.effective(key), snapshot, record)
         except Cancelled:
             with self.lock:
-                account_view['status'] = 'İşlem durduruldu'
-                self.event('cancelled', 'İşlem durduruldu', key)
+                if self.preference(key).get('enabled', True):
+                    account_view['status'] = 'İşlem durduruldu'
+                    self.event('cancelled', 'İşlem durduruldu', key)
+                else:
+                    account_view['status'] = 'İzleme kapalı'
         except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError):
             with self.lock:
-                if self.closed or epoch != self.epoch:
+                if not self.preference(key).get('enabled', True):
+                    account_view['status'] = 'İzleme kapalı'
+                elif self.closed or epoch != self.epoch:
                     account_view['status'] = 'İşlem durduruldu'
                 else:
                     changed = account_view['error'] is None
@@ -626,8 +698,8 @@ class Watcher:
                     self.next_scan = time.time() + 60  # Local folder discovery only; no network.
                 epoch = self.epoch
                 due = [k for k, a in self.accounts.items()
-                       if refresh or (self.running and self.preference(k).get('enabled', True)
-                                      and a['nextCheckAt'] <= time.time())]
+                       if self.preference(k).get('enabled', True)
+                       and (refresh or (self.running and a['nextCheckAt'] <= time.time()))]
             if self.codex:
                 for key in due:
                     if self.closed or epoch != self.epoch:
@@ -653,8 +725,15 @@ def main():
     if args.check:
         codex = codex_executable()
         if not codex:
-            raise SystemExit('Codex CLI bulunamadı')
+            raise SystemExit(localize('Codex CLI bulunamadı'))
+        try:
+            prefs = json.loads((args.state_dir / 'state.json').read_text()).get('profiles', {}) if (args.state_dir / 'state.json').exists() else {}
+        except (OSError, ValueError, TypeError):
+            raise SystemExit('Yerel hesap ayarları okunamadı; hiçbir hesap sorgulanmadı.')
         for home in discover(args.root):
+            pref = prefs.get(home.name, {})
+            if pref is False or (isinstance(pref, dict) and not pref.get('enabled', True)):
+                continue
             try:
                 account, response, snapshot = read_account(codex, home, Children())
                 print(json.dumps({'profile': home.name, 'plan': account.get('planType'),
@@ -669,7 +748,7 @@ def main():
     try:
         fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        raise SystemExit('Codex Pulse zaten açık.')
+        raise SystemExit(localize('Codex Pulse zaten açık.'))
     output_lock = threading.Lock()
 
     def emit(event):
@@ -682,7 +761,7 @@ def main():
         print(json.dumps({'running': False, 'settings': DEFAULT_SETTINGS, 'accounts': [],
                           'history': [], 'activeId': None, 'commandError': None,
                           'notification': None, 'quietUntil': None,
-                          'error': 'Yerel ayarlar okunamadı. İşlem kayıtlarını silmeden state.json dosyasını kontrol edin.'}), flush=True)
+                          'error': localize('Yerel ayarlar okunamadı. İşlem kayıtlarını silmeden state.json dosyasını kontrol edin.')}), flush=True)
         return
     signal.signal(signal.SIGTERM, lambda *_: watcher.command({'action': 'quit'}))
 

@@ -1,8 +1,24 @@
-# Codex Pulse 1.1
+# Codex Pulse 1.2
 
 Mac menü çubuğunda Monocode Codex hesaplarını ayrı ayrı gösteren yerel uygulama.
 Uygulama e-ticaret projesinden bağımsızdır; kurulu `.app` paketi kendi kodunu içerir.
 Kaynak klasörünü taşımanız veya silmeniz kurulu uygulamayı etkilemez.
+
+## Dil ve hesap listesi
+
+Varsayılan dil **İngilizce**dir. **Settings → Language → Türkçe → Save settings**
+yoluyla Türkçe’ye geçebilirsiniz; yeniden açmanız gerekmez. Menüler, durum mesajları,
+bildirimler, geçmiş ve tarih gösterimleri seçilen dili kullanır; takma adlar çevrilmez.
+
+Dropdownlar başlangıçta kapalıdır ve aynı anda birden fazla hesap açık kalabilir.
+Kapalı satırda kalan süre küçük bir göstergeyle görünür; pencereyi büyütmez.
+Pencere bir ile üç hesabın boyuna uyar; fazlası kaydırılır. Takma ad alanında **Enter**
+ile kaydedebilirsiniz; kayıt onaylandığında hesap ayarları penceresi kapanır.
+
+Limit çubukları **5 saatlik limit** ve **Haftalık limit** olarak adlandırılmıştır.
+Bu etiketleri uygulama belirler; Monocode’dan hazır metin olarak gelmez.
+Switch’i kapalı hesap açılışta, yenilemede, hata tekrarında, uyanmada ve CLI durum
+kontrolünde de sorgulanmaz. Eski hata kayıtları geçmişte kalır; yeni kontrol yapılmaz.
 
 ## Başlatma ve durdurma
 
@@ -92,7 +108,7 @@ Monocode’un seçili hesabını değiştirmez.
 
 ## Arkadaşına gönderme
 
-Paylaşım dosyası: **Codex-Pulse-1.1.0-universal.dmg**.
+Paylaşım dosyası: **Codex-Pulse-1.2.0-universal.dmg**.
 İçindeki `Codex Pulse.app` uygulamasını `Applications` klasörüne sürükleyin.
 Yönetici yetkisi olmadan kişisel `~/Applications` klasörüne de kopyalanabilir.
 DMG açıkken çalıştırmak yerine önce uygulamayı kopyalayın.
@@ -118,7 +134,7 @@ Uygulama yerel/ad-hoc imzalıdır; Apple Developer ID veya noter onayı yoktur.
 DMG yapmak bunu değiştirmez; başka Mac’te macOS açılışı engelleyebilir.
 Dağıtım için noter onayı ayrıca Apple geliştirici hesabı ve imzalama gerektirir.
 
-**Codex-Pulse-1.1.0-source.zip** kaynak kodunun bağımsız kopyasıdır. İstediğiniz klasöre
+**Codex-Pulse-1.2.0-source.zip** kaynak kodunun bağımsız kopyasıdır. İstediğiniz klasöre
 çıkarıp geliştirebilirsiniz; e-ticaret projesinin Node/Prisma dosyalarına ihtiyaç duymaz.
 
 ## Geliştirme ve doğrulama
