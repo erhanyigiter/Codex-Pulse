@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import ServiceManagement
 import UserNotifications
 
@@ -338,6 +339,12 @@ struct AccountCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .padding(.vertical, 6).contentShape(Rectangle())
+                    .help(model.tr("Sıralamak için sürükleyin"))
+                    .onDrag { NSItemProvider(object: account.id as NSString) }
+
                 Button(action: toggleExpanded) {
                     HStack(spacing: 10) {
                         Image(systemName: "chevron.right")
@@ -687,7 +694,7 @@ struct Panel: View {
                     Image(systemName: "waveform.path.ecg").font(.system(size: 24, weight: .medium)).foregroundStyle(Color.accentColor)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Codex Pulse").font(.system(size: 19, weight: .semibold))
-                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.3"]))
+                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.3.1"]))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -723,6 +730,19 @@ struct Panel: View {
                         ForEach(model.snapshot.accounts) { account in
                             AccountCard(model: model, account: account, expanded: expandedAccounts.contains(account.id),
                                         toggleExpanded: { toggleAccount(account.id) }, edit: { editingAccount = account })
+                                .onDrop(of: [UTType.text], isTargeted: nil) { providers in
+                                    guard let provider = providers.first,
+                                          provider.canLoadObject(ofClass: NSString.self) else { return false }
+                                    _ = provider.loadObject(ofClass: NSString.self) { value, _ in
+                                        guard let source = value as? String else { return }
+                                        DispatchQueue.main.async {
+                                            guard source != account.id,
+                                                  model.snapshot.accounts.contains(where: { $0.id == source }) else { return }
+                                            model.send("moveAccount", extra: ["id": source, "targetId": account.id])
+                                        }
+                                    }
+                                    return true
+                                }
                                 .trackPanelHeight("account-" + account.id)
                         }
                     } else if tab == 1 { GlobalSettingsView(model: model) }

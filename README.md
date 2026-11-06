@@ -1,5 +1,7 @@
 # Codex Pulse
 
+Drag the handle on an account onto another account to reorder it. Your order is saved on this Mac.
+
 A macOS menu bar companion for **Monocode's Codex accounts**. See usage windows,
 follow their reset times, and optionally send one short prompt after Codex confirms
 that usage is available again.
@@ -13,7 +15,11 @@ that usage is available again.
 
 <sub>Weekly limit full: countdown to the weekly reset. All screenshots use sample accounts.</sub>
 
-## What's new in 1.3.0
+## What's new in 1.3.1
+
+- Drag account handles onto another account to reorder them; the order persists across restarts.
+
+## Included from 1.3.0
 
 - Discover the default signed-in account in `~/.codex` alongside Monocode profiles.
 - Show the weekly reset countdown when the weekly limit is full, including collapsed rows and the menu bar.
@@ -45,7 +51,7 @@ starts a new usage window. Automation is off by default.
 
 ## Install
 
-1. Download `Codex-Pulse-1.3.0-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
+1. Download `Codex-Pulse-1.3.1-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
 2. Copy **Codex Pulse.app** to Applications, or to your personal `~/Applications` folder.
 3. Open the copied app and click the waveform icon in the menu bar.
 4. Review **Settings**, save your choices, then click **Start / Başlat**.

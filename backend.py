@@ -320,7 +320,7 @@ def read_account(codex, home, children, on_account=None, guard=nullcontext):
 
         try:
             request(1, 'initialize', {'clientInfo': {'name': 'codex_pulse', 'title': APP_NAME,
-                                                    'version': '1.3.0'}, 'capabilities': None})
+                                                    'version': '1.3.1'}, 'capabilities': None})
             with guard():
                 process.stdin.write('{"method":"initialized"}\n')
                 process.stdin.flush()
@@ -371,11 +371,13 @@ class Watcher:
         self.codex = codex_executable()
         self.path = state_dir / 'state.json'
         self.state = {'version': 2, 'settings': dict(DEFAULT_SETTINGS), 'profiles': {},
-                      'journal': {}, 'history': []}
+                      'journal': {}, 'history': [], 'accountOrder': []}
         if self.path.exists():
             loaded = json.loads(self.path.read_text())
             if not isinstance(loaded, dict) or not isinstance(loaded.get('journal', {}), dict):
                 raise ValueError('Yerel ayar dosyası geçersiz; işlem kaydı korunarak kontrol edilmeli.')
+            order = loaded.get('accountOrder', [])
+            self.state['accountOrder'] = list(dict.fromkeys(k for k in order if isinstance(k, str))) if isinstance(order, list) else []
             self.state['journal'] = loaded.get('journal', {})
             self.state['history'] = loaded.get('history', [])[-MAX_HISTORY:]
             # v1 boolean account switches and its custom interval are preserved.
@@ -437,10 +439,16 @@ class Watcher:
         self.accounts = {k: v for k, v in self.accounts.items() if k in valid}
         self.cached = {k: v for k, v in self.cached.items() if k in valid}
 
+    def ordered_ids(self):
+        saved = self.state['accountOrder']
+        return [key for key in saved if key in self.accounts] + [
+            key for key in self.accounts if key not in saved]
+
     def publish(self, notification=None):
         with self.lock:
             rows = []
-            for key, account in self.accounts.items():
+            for key in self.ordered_ids():
+                account = self.accounts[key]
                 pref = self.preference(key)
                 row = dict(account)
                 row['alias'] = pref.get('alias', '')
@@ -556,6 +564,16 @@ class Watcher:
                         account['error'] = None
                         account['status'] = 'İzleme kapalı'
                     self.event('settings', 'Hesap izlemeye açıldı' if pref['enabled'] else 'Hesap izleme kapatıldı', key)
+                elif action == 'moveAccount':
+                    source, target = command.get('id'), command.get('targetId')
+                    if not isinstance(source, str) or not isinstance(target, str) or source not in self.accounts or target not in self.accounts:
+                        raise ValueError('Geçersiz hesap seçimi.')
+                    order = self.ordered_ids()
+                    destination = order.index(target)
+                    order.remove(source)
+                    order.insert(destination, source)
+                    self.state['accountOrder'] = order
+                    self.save()
                 elif action == 'clearHistory':
                     self.state['history'] = []  # Never clear the at-most-once journal.
                     self.save()

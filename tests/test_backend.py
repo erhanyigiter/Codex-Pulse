@@ -236,6 +236,33 @@ class AdvancedFeatureTests(unittest.TestCase):
             watcher = pulse.Watcher(profiles, state, events.append, force_paused=force_paused)
         return watcher, events
 
+    def test_reorder_persists_in_both_directions_and_appends_new_accounts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            for name in ('account-second', 'account-third'):
+                home = watcher.root / name
+                home.mkdir()
+                (home / 'auth.json').write_text('{}')
+            watcher.rescan()
+            with patch.object(pulse, 'read_account') as read, patch.object(pulse, 'send_prompt') as send:
+                watcher.command({'action': 'moveAccount', 'id': 'account-test', 'targetId': 'account-third'})
+                self.assertEqual([r['id'] for r in events[-1]['accounts']], ['account-second', 'account-third', 'account-test'])
+                watcher.command({'action': 'moveAccount', 'id': 'account-test', 'targetId': 'account-second'})
+                self.assertEqual(watcher.ordered_ids(), ['account-test', 'account-second', 'account-third'])
+                read.assert_not_called()
+                send.assert_not_called()
+            reopened, _ = self.make_watcher(folder)
+            self.assertEqual(reopened.ordered_ids(), watcher.ordered_ids())
+            home = watcher.root / 'account-new'
+            home.mkdir()
+            (home / 'auth.json').write_text('{}')
+            reopened.rescan()
+            self.assertEqual(reopened.ordered_ids()[-1], 'account-new')
+            before = reopened.ordered_ids()
+            reopened.command({'action': 'moveAccount', 'id': 'missing', 'targetId': 'account-test'})
+            self.assertIsNotNone(reopened.command_error)
+            self.assertEqual(reopened.ordered_ids(), before)
+
     def test_default_home_is_discovered_and_used_for_status(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
