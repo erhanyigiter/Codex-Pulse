@@ -320,7 +320,7 @@ def read_account(codex, home, children, on_account=None, guard=nullcontext):
 
         try:
             request(1, 'initialize', {'clientInfo': {'name': 'codex_pulse', 'title': APP_NAME,
-                                                    'version': '1.3.1'}, 'capabilities': None})
+                                                    'version': '1.3.2'}, 'capabilities': None})
             with guard():
                 process.stdin.write('{"method":"initialized"}\n')
                 process.stdin.flush()
@@ -444,10 +444,25 @@ class Watcher:
         return [key for key in saved if key in self.accounts] + [
             key for key in self.accounts if key not in saved]
 
+    def visible_ids(self):
+        # Prefer dedicated profiles over the mutable default CODEX_HOME.
+        representatives = {}
+        for key in sorted(self.accounts, key=lambda key: key == 'default'):
+            owner = self.cached.get(key, {}).get('owner')
+            if owner:
+                representatives.setdefault(owner, key)
+        result = []
+        for key in self.ordered_ids():
+            owner = self.cached.get(key, {}).get('owner')
+            representative = representatives.get(owner, key)
+            if representative not in result:
+                result.append(representative)
+        return result
+
     def publish(self, notification=None):
         with self.lock:
             rows = []
-            for key in self.ordered_ids():
+            for key in self.visible_ids():
                 account = self.accounts[key]
                 pref = self.preference(key)
                 row = dict(account)
@@ -757,7 +772,8 @@ def main():
         except (OSError, ValueError, TypeError):
             raise SystemExit('Yerel hesap ayarları okunamadı; hiçbir hesap sorgulanmadı.')
         for home in discover(args.root):
-            pref = prefs.get(home.name, {})
+            key = 'default' if home.resolve() == DEFAULT_HOME.resolve() else home.name
+            pref = prefs.get(key, {})
             if pref is False or (isinstance(pref, dict) and not pref.get('enabled', True)):
                 continue
             try:

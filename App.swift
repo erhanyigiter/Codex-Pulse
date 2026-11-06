@@ -694,7 +694,7 @@ struct Panel: View {
                     Image(systemName: "waveform.path.ecg").font(.system(size: 24, weight: .medium)).foregroundStyle(Color.accentColor)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Codex Pulse").font(.system(size: 19, weight: .semibold))
-                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.3.1"]))
+                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.3.2"]))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()

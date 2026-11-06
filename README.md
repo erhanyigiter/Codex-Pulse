@@ -15,7 +15,12 @@ that usage is available again.
 
 <sub>Weekly limit full: countdown to the weekly reset. All screenshots use sample accounts.</sub>
 
-## What's new in 1.3.1
+## What's new in 1.3.2
+
+- Merge duplicate profiles using the verified Codex account identity; prefer dedicated Monocode profiles over the default profile.
+- Remove the default-account mismatch banner.
+
+## Included from 1.3.1
 
 - Drag account handles onto another account to reorder them; the order persists across restarts.
 
@@ -51,7 +56,7 @@ starts a new usage window. Automation is off by default.
 
 ## Install
 
-1. Download `Codex-Pulse-1.3.1-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
+1. Download `Codex-Pulse-1.3.2-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
 2. Copy **Codex Pulse.app** to Applications, or to your personal `~/Applications` folder.
 3. Open the copied app and click the waveform icon in the menu bar.
 4. Review **Settings**, save your choices, then click **Start / Başlat**.

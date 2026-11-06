@@ -236,6 +236,23 @@ class AdvancedFeatureTests(unittest.TestCase):
             watcher = pulse.Watcher(profiles, state, events.append, force_paused=force_paused)
         return watcher, events
 
+    def test_duplicate_verified_accounts_merge_but_different_account_ids_remain(self):
+        with tempfile.TemporaryDirectory() as folder:
+            watcher, events = self.make_watcher(folder)
+            watcher.accounts['default'] = dict(watcher.accounts['account-test'], id='default')
+            watcher.accounts['account-other'] = dict(watcher.accounts['account-test'], id='account-other')
+            watcher.state['accountOrder'] = ['default', 'account-other', 'account-test']
+            watcher.cached = {'default': {'owner': 'same'}, 'account-test': {'owner': 'same'},
+                              'account-other': {'owner': 'different'}}
+            watcher.publish()
+            self.assertEqual([r['id'] for r in events[-1]['accounts']], ['account-test', 'account-other'])
+            # A login change makes the default account distinct again.
+            watcher.cached['default']['owner'] = 'new-owner'
+            watcher.publish()
+            self.assertEqual(len(events[-1]['accounts']), 3)
+            watcher.cached.pop('default')
+            self.assertIn('default', watcher.visible_ids())
+
     def test_reorder_persists_in_both_directions_and_appends_new_accounts(self):
         with tempfile.TemporaryDirectory() as folder:
             watcher, events = self.make_watcher(folder)
