@@ -236,6 +236,32 @@ class AdvancedFeatureTests(unittest.TestCase):
             watcher = pulse.Watcher(profiles, state, events.append, force_paused=force_paused)
         return watcher, events
 
+    def test_default_home_is_discovered_and_used_for_status(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            default = root / '.codex'
+            default.mkdir()
+            (default / 'auth.json').write_text('{}')
+            profiles = root / 'profiles'
+            profiles.mkdir()
+            state = root / 'state'
+            state.mkdir()
+            with patch.object(pulse, 'DEFAULT_ROOT', profiles), \
+                 patch.object(pulse, 'DEFAULT_HOME', default), \
+                 patch.object(pulse, 'codex_executable', return_value='/fake'):
+                watcher = pulse.Watcher(profiles, state, lambda _: None)
+                self.assertIn('default', watcher.accounts)
+                with patch.object(pulse, 'read_account', return_value=(
+                        {'email': 'default@example.com'}, {'accountId': 'default'}, snapshot(19000, 0, 100))) as read, \
+                     patch.object(pulse, 'send_prompt') as send:
+                    watcher.check('default', watcher.epoch, allow_trigger=False)
+                    self.assertEqual(read.call_args.args[1], default)
+                    send.assert_not_called()
+                row = watcher.accounts['default']
+                self.assertEqual(row['weeklyResetsAt'], 50000)
+                self.assertEqual(row['resetsAt'], 19000)
+                self.assertIn('Haftalık limit dolu', row['status'])
+
     def test_migration_keeps_journal_and_disabled_accounts(self):
         old = {'interval': 20, 'profiles': {'account-test': False},
                'journal': {'owner': {'target': 1000, 'attempted': 1000}}}

@@ -1,4 +1,6 @@
-# Codex Pulse 1.2
+# Codex Pulse 1.3
+
+The default signed-in account in `~/.codex` is also discovered. When weekly usage reaches 100%, countdowns show the weekly reset. Usage colors are green below 50%, yellow from 50% to 99%, and red at 100%.
 
 A local macOS menu bar companion for your Monocode Codex profiles.
 

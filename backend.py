@@ -25,6 +25,7 @@ import uuid
 
 APP_NAME = 'Codex Pulse'
 DEFAULT_ROOT = Path.home() / 'Library/Application Support/com.monocode.desktop/provider-accounts/codex'
+DEFAULT_HOME = Path.home() / '.codex'
 DEFAULT_STATE = Path.home() / 'Library/Application Support/Codex Pulse'
 GRACE = 15
 MAX_HISTORY = 300
@@ -189,9 +190,11 @@ def identity(account, response):
 
 
 def discover(root):
-    if not root.is_dir():
-        return []
-    return [p for p in sorted(root.glob('account-*')) if p.is_dir() and (p / 'auth.json').is_file()]
+    homes = [p for p in sorted(root.glob('account-*'))
+             if p.is_dir() and (p / 'auth.json').is_file()]
+    if root == DEFAULT_ROOT and (DEFAULT_HOME / 'auth.json').is_file():
+        homes.insert(0, DEFAULT_HOME)
+    return list({p.resolve(): p for p in homes}.values())
 
 
 def codex_executable():
@@ -317,7 +320,7 @@ def read_account(codex, home, children, on_account=None, guard=nullcontext):
 
         try:
             request(1, 'initialize', {'clientInfo': {'name': 'codex_pulse', 'title': APP_NAME,
-                                                    'version': '1.2.0'}, 'capabilities': None})
+                                                    'version': '1.3.0'}, 'capabilities': None})
             with guard():
                 process.stdin.write('{"method":"initialized"}\n')
                 process.stdin.flush()
@@ -418,8 +421,10 @@ class Watcher:
 
     def rescan(self):
         valid = set()
+        self.homes = {}
         for index, home in enumerate(discover(self.root)):
-            key = home.name
+            key = 'default' if home.resolve() == DEFAULT_HOME.resolve() else home.name
+            self.homes[key] = home
             valid.add(key)
             pref = self.preference(key)
             if key not in self.accounts:
@@ -427,7 +432,7 @@ class Watcher:
                                       'plan': '', 'status': 'Durum okunuyor' if pref.get('enabled', True) else 'İzleme kapalı', 'nextCheckAt': 0,
                                       'enabled': pref.get('enabled', True), 'alias': pref.get('alias', ''),
                                       'usedPercent': None, 'weeklyUsedPercent': None,
-                                      'resetsAt': None, 'lastCheckedAt': None,
+                                      'resetsAt': None, 'weeklyResetsAt': None, 'lastCheckedAt': None,
                                       'lastTriggeredAt': None, 'error': None}
         self.accounts = {k: v for k, v in self.accounts.items() if k in valid}
         self.cached = {k: v for k, v in self.cached.items() if k in valid}
@@ -580,7 +585,7 @@ class Watcher:
             self.active_id = key
             self.publish()
         try:
-            home = self.root / key
+            home = self.homes[key]
             @contextmanager
             def check_enabled():
                 with self.lock:
@@ -607,7 +612,8 @@ class Watcher:
                                     plan=account.get('planType') or '', lastCheckedAt=now,
                                     usedPercent=window.get('usedPercent') if window else None,
                                     weeklyUsedPercent=weekly.get('usedPercent') if weekly else None,
-                                    resetsAt=window.get('resetsAt') if window else None, error=None)
+                                    resetsAt=window.get('resetsAt') if window else None,
+                                    weeklyResetsAt=weekly.get('resetsAt') if weekly else None, error=None)
                 if not owner:
                     account_view['status'] = 'Hesap kimliği doğrulanamadı; sorgu gönderilmez'
                     account_view['nextCheckAt'] = now + self.effective(key)['retryInterval'] * 60
@@ -616,6 +622,8 @@ class Watcher:
                 self.cached[key] = {'owner': owner, 'snapshot': snapshot}
                 record = self.state['journal'].setdefault(owner, {})
                 trigger, reason = decide(snapshot, record, now)
+                if weekly and finite(weekly.get('usedPercent')) and weekly['usedPercent'] >= 100:
+                    reason = 'Haftalık limit dolu · yenilenme bekleniyor'
                 account_view['status'] = reason
                 account_view['lastTriggeredAt'] = record.get('lastSuccess')
                 settings = self.effective(key)

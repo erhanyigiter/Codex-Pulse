@@ -156,6 +156,7 @@
     "Yerel hesap ayarları okunamadı; hiçbir hesap sorgulanmadı.": "Could not read account preferences; no accounts were checked.",
     "Codex Pulse zaten açık.": "Codex Pulse is already running.",
     "Yerel ayarlar okunamadı. İşlem kayıtlarını silmeden state.json dosyasını kontrol edin.": "Could not read local settings. Inspect state.json without deleting the attempt journal.",
-    "1 hesap · {status} · {version}": "1 account · {status} · {version}"
+    "1 hesap · {status} · {version}": "1 account · {status} · {version}",
+    "Haftalık limit dolu · yenilenme bekleniyor": "Weekly limit full · waiting for reset"
   }
 }

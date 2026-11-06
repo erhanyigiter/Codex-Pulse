@@ -52,11 +52,14 @@ struct AccountStatus: Codable, Identifiable {
     let lastCheckedAt: Double?
     let lastTriggeredAt: Double?
     let error: String?
+    var weeklyResetsAt: Double? = nil
     var alias = ""
     var overrideEnabled = false
     var mode = "reset"
     var interval = 30
     var retryInterval = 5
+    var weeklyFull: Bool { (weeklyUsedPercent ?? 0) >= 100 }
+    var countdownReset: Double? { weeklyFull ? weeklyResetsAt : resetsAt }
     var displayName: String { alias.isEmpty ? label : alias }
 }
 
@@ -317,8 +320,8 @@ final class Model: NSObject, ObservableObject, UNUserNotificationCenterDelegate 
         let selected = snapshot.accounts.first { $0.id == snapshot.settings.selectedAccountId }
         if !snapshot.running && selected == nil { return tr("Duraklatıldı") }
         let account = selected ?? snapshot.accounts.filter { $0.enabled && $0.error == nil }
-            .filter { $0.resetsAt != nil }.min { ($0.resetsAt ?? .infinity) < ($1.resetsAt ?? .infinity) }
-        guard let account, let due = account.resetsAt else { return tr("İzleniyor") }
+            .filter { $0.countdownReset != nil }.min { ($0.countdownReset ?? .infinity) < ($1.countdownReset ?? .infinity) }
+        guard let account, let due = account.countdownReset else { return tr("İzleniyor") }
         let seconds = max(0, Int(due - now.timeIntervalSince1970))
         let name = selected == nil ? "" : String(account.displayName.prefix(10)) + " "
         let paused = snapshot.running && account.enabled ? "" : "Ⅱ "
@@ -356,13 +359,13 @@ struct AccountCard: View {
                 if !expanded {
                     HStack(spacing: 4) {
                         Image(systemName: "clock").font(.system(size: 9))
-                        Text(model.inlineCountdown(account.resetsAt))
+                        Text(model.inlineCountdown(account.countdownReset))
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                     }
                     .foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Capsule().fill(Color.primary.opacity(0.035)))
                     .fixedSize().help(model.tr("Kalan süre"))
-                    .accessibilityLabel(model.tr("Kalan süre") + ": " + model.countdown(account.resetsAt))
+                    .accessibilityLabel(model.tr("Kalan süre") + ": " + model.countdown(account.countdownReset))
                 }
                 Button(action: edit) { Image(systemName: "slider.horizontal.3") }.buttonStyle(.borderless).help(model.tr("Hesap ayarları"))
                 Toggle(model.tr("Bu hesabı izle"), isOn: Binding(get: { account.enabled }, set: { _ in
@@ -371,17 +374,17 @@ struct AccountCard: View {
             }
             if expanded {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(model.countdown(account.resetsAt)).font(.system(size: 23, weight: .medium, design: .monospaced))
+                    Text(model.countdown(account.countdownReset)).font(.system(size: 23, weight: .medium, design: .monospaced))
                         .foregroundStyle(account.enabled ? Color.primary : Color.secondary)
                     Spacer()
-                    Text(model.tr("5 saatlik limit")).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(model.tr(account.weeklyFull ? "Haftalık limit" : "5 saatlik limit")).font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 16) {
                     quota("5 saatlik limit", used: account.usedPercent)
                     quota("Haftalık limit", used: account.weeklyUsedPercent)
                 }
                 HStack(alignment: .top, spacing: 6) {
-                    Circle().fill(account.error != nil ? Color.orange : account.enabled && model.snapshot.running ? Color.green : Color.secondary)
+                    Circle().fill(account.error != nil ? Color.orange : account.enabled && model.snapshot.running ? quotaColor(max(account.usedPercent ?? 0, account.weeklyUsedPercent ?? 0)) : Color.secondary)
                         .frame(width: 6, height: 6).padding(.top, 4)
                     Text(model.tr(account.error ?? (account.enabled ? account.status : "Bu hesap kapalı")))
                         .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -411,11 +414,24 @@ struct AccountCard: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.07)))
     }
+    func quotaColor(_ used: Double) -> Color {
+        used >= 100 ? .red : used >= 50 ? .yellow : .green
+    }
     func quota(_ label: String, used: Double?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack { Text(model.tr(label)); Spacer(); Text(used.map { model.snapshot.settings.language == "en" ? "\(Int($0))%" : "%\(Int($0))" } ?? "—").monospacedDigit() }
                 .font(.system(size: 10)).foregroundStyle(.secondary)
-            ProgressView(value: min(100, max(0, used ?? 0)), total: 100).tint((used ?? 0) >= 95 ? .orange : .accentColor)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.25))
+                    if let used {
+                        Capsule().fill(quotaColor(used))
+                            .frame(width: max(6, geometry.size.width * min(100, max(0, used)) / 100))
+                    }
+                }
+            }.frame(height: 6)
+            .accessibilityLabel(model.tr(label))
+            .accessibilityValue(used.map { "\(Int($0))%" } ?? "—")
         }
     }
 }
@@ -671,7 +687,7 @@ struct Panel: View {
                     Image(systemName: "waveform.path.ecg").font(.system(size: 24, weight: .medium)).foregroundStyle(Color.accentColor)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Codex Pulse").font(.system(size: 19, weight: .semibold))
-                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.2"]))
+                        Text(model.fmt(model.snapshot.accounts.count == 1 ? "1 hesap · {status} · {version}" : "{count} hesap · {status} · {version}", ["count": String(model.snapshot.accounts.count), "status": model.tr(model.snapshot.running ? "İzleme açık" : "Duraklatıldı"), "version": "1.3"]))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -825,11 +841,11 @@ if let flag = CommandLine.arguments.firstIndex(of: "--preview"), CommandLine.arg
     ]
     var demoAccounts = [
         AccountStatus(id: "preview-one", label: "work@example.com", plan: "plus", enabled: true,
-                      status: "Yenilenme izleniyor", usedPercent: 8, weeklyUsedPercent: 60,
-                      resetsAt: now + 11000, nextCheckAt: now + 11015, lastCheckedAt: now,
-                      lastTriggeredAt: now - 7200, error: nil, alias: "Work"),
+                      status: "Haftalık limit dolu · yenilenme bekleniyor", usedPercent: 8, weeklyUsedPercent: 100,
+                      resetsAt: now + 11000, nextCheckAt: now + 260015, lastCheckedAt: now,
+                      lastTriggeredAt: now - 7200, error: nil, weeklyResetsAt: now + 260000, alias: "Work"),
         AccountStatus(id: "preview-two", label: "personal@example.com", plan: "plus", enabled: true,
-                      status: "Yenilenme izleniyor", usedPercent: 21, weeklyUsedPercent: 38,
+                      status: "Yenilenme izleniyor", usedPercent: 21, weeklyUsedPercent: 60,
                       resetsAt: now + 5400, nextCheckAt: now + 5415, lastCheckedAt: now,
                       lastTriggeredAt: nil, error: nil, alias: "Personal")
     ]

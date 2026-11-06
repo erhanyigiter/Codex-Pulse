@@ -9,9 +9,16 @@ that usage is available again.
  · [Türkçe kullanım rehberi](KULLANIM.md)
  · [Contributing](CONTRIBUTING.md)
 
-<img src="docs/images/dropdowns.gif" alt="English demo: expand Work, expand Personal independently, then collapse both account dropdowns" width="420">
+<img src="docs/images/accounts.png" alt="Codex Pulse 1.3: weekly reset countdown and green, yellow, red usage bars" width="420">
 
-<sub>Expand and collapse accounts independently. The animation uses sample accounts.</sub>
+<sub>Weekly limit full: countdown to the weekly reset. All screenshots use sample accounts.</sub>
+
+## What's new in 1.3.0
+
+- Discover the default signed-in account in `~/.codex` alongside Monocode profiles.
+- Show the weekly reset countdown when the weekly limit is full, including collapsed rows and the menu bar.
+- Usage colors: green below 50%, yellow from 50% to 99%, red at 100%.
+- Keep English/Turkish support, independent dropdowns, and existing preferences.
 
 ## Features
 
@@ -38,7 +45,7 @@ starts a new usage window. Automation is off by default.
 
 ## Install
 
-1. Download `Codex-Pulse-1.2.0-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
+1. Download `Codex-Pulse-1.3.0-universal.dmg` from [Releases](https://github.com/erhanyigiter/Codex-Pulse/releases).
 2. Copy **Codex Pulse.app** to Applications, or to your personal `~/Applications` folder.
 3. Open the copied app and click the waveform icon in the menu bar.
 4. Review **Settings**, save your choices, then click **Start / Başlat**.
@@ -96,6 +103,7 @@ Accounts are discovered under:
 
 ```text
 ~/Library/Application Support/com.monocode.desktop/provider-accounts/codex/account-*
+~/.codex (default account, when auth.json exists)
 ```
 
 The app's preferences, aliases, history, and attempt journal stay in:
@@ -148,7 +156,7 @@ and does not depend on the source directory after installation.
 <details>
 <summary>Expanded accounts, language settings, and activity history</summary>
 
-<img src="docs/images/accounts.png" alt="Two independently expanded accounts with 5-hour limit and Weekly limit bars, in English" width="420">
+<img src="docs/images/accounts.png" alt="Weekly reset countdown and red, yellow, green usage bars with sample accounts" width="420">
 
 <img src="docs/images/settings.png" alt="Reset-only scheduling, custom status retry minutes, quiet hours, and startup settings" width="420">
 <img src="docs/images/history.png" alt="Local event history and export controls" width="420">

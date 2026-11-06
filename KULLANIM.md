@@ -1,4 +1,6 @@
-# Codex Pulse 1.2
+# Codex Pulse 1.3
+
+`~/.codex` altındaki varsayılan oturum da listelenir. Haftalık kullanım %100 olduğunda sayaçlar haftalık yenilenmeyi gösterir. Kullanım %0–49 yeşil, %50–99 sarı, %100 ve üzerinde kırmızıdır.
 
 Mac menü çubuğunda Monocode Codex hesaplarını ayrı ayrı gösteren yerel uygulama.
 Uygulama e-ticaret projesinden bağımsızdır; kurulu `.app` paketi kendi kodunu içerir.
@@ -108,7 +110,7 @@ Monocode’un seçili hesabını değiştirmez.
 
 ## Arkadaşına gönderme
 
-Paylaşım dosyası: **Codex-Pulse-1.2.0-universal.dmg**.
+Paylaşım dosyası: **Codex-Pulse-1.3.0-universal.dmg**.
 İçindeki `Codex Pulse.app` uygulamasını `Applications` klasörüne sürükleyin.
 Yönetici yetkisi olmadan kişisel `~/Applications` klasörüne de kopyalanabilir.
 DMG açıkken çalıştırmak yerine önce uygulamayı kopyalayın.
@@ -134,7 +136,7 @@ Uygulama yerel/ad-hoc imzalıdır; Apple Developer ID veya noter onayı yoktur.
 DMG yapmak bunu değiştirmez; başka Mac’te macOS açılışı engelleyebilir.
 Dağıtım için noter onayı ayrıca Apple geliştirici hesabı ve imzalama gerektirir.
 
-**Codex-Pulse-1.2.0-source.zip** kaynak kodunun bağımsız kopyasıdır. İstediğiniz klasöre
+**Codex-Pulse-1.3.0-source.zip** kaynak kodunun bağımsız kopyasıdır. İstediğiniz klasöre
 çıkarıp geliştirebilirsiniz; e-ticaret projesinin Node/Prisma dosyalarına ihtiyaç duymaz.
 
 ## Geliştirme ve doğrulama
